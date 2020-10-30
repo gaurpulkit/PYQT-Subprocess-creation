@@ -5,106 +5,135 @@ from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtCore import QSize
 import psutil
 import subprocess
-
+import os
+import time
+from threading import Thread
 
 class MainWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
+        self.close=False
+        self.setWindowTitle('Boom')
         self.setMinimumSize(QSize(300, 200))
 
-        self.newButton = QPushButton('Process 1 Start', self)
-        self.newButton.clicked.connect(self.clickMethodA)
-        self.newButton.show()
-        self.newButton.move(0, 0)
+        self.refreshButton = QPushButton('Refresh files', self)
+        self.refreshButton.clicked.connect(self.refresh)
+        self.refreshButton.show()
+        self.refreshButton.move(100,150)
 
-        self.newButton2 = QPushButton('Process 2 Start', self)
-        self.newButton2.clicked.connect(self.clickMethodB)
-        self.newButton2.show()
-        self.newButton2.move(100, 0)
+        self.buttons={}
+        self.fileButtons=[]
 
-        self.pauseButton = QPushButton('Process 1 Pause', self)
-        self.pauseButton.clicked.connect(self.pauseMethodA)
-        self.pauseButton.show()
-        self.pauseButton.move(0, 30)
-        self.pauseButton.setEnabled(False)
+    def clickMethod(self,fileName,dataName):
+        p=subprocess.Popen(["python","scripts/"+fileName,"-f","data/"+dataName])
+        self.buttons[dataName]['p']= psutil.Process(pid=p.pid)
+        self.buttons[dataName]['pauseButton'].setEnabled(True)
+        self.buttons[dataName]['killButton'].setEnabled(True)
+        self.buttons[dataName]['newButton'].setDisabled(True)
+        Thread(target=lambda x=p,dataName=dataName:self.poller(x,dataName)).start()
 
-        self.pauseButton2 = QPushButton('Process 2 Pause', self)
-        self.pauseButton2.clicked.connect(self.pauseMethodB)
-        self.pauseButton2.show()
-        self.pauseButton2.move(100, 30)
-        self.pauseButton2.setEnabled(False)
+    def poller(self,p,dataName):
+        while True:
+            if self.close:
+                break
+            time.sleep(0.1)
+            if p.poll() is not None:
+                self.buttons[dataName]['pauseButton'].setEnabled(False)
+                self.buttons[dataName]['killButton'].setEnabled(False)
+                self.buttons[dataName]['newButton'].setDisabled(False)
+                self.buttons[dataName]['resumeButton'].setDisabled(True)
+                break
 
-        self.resumeButton = QPushButton('Process 1 Resume', self)
-        self.resumeButton.clicked.connect(self.resumeMethodA)
-        self.resumeButton.show()
-        self.resumeButton.move(0, 60)
-        self.resumeButton.setEnabled(False)
+    def pauseMethod(self,dataName):
+        self.buttons[dataName]['p'].suspend()
+        self.buttons[dataName]['pauseButton'].setDisabled(True)
+        self.buttons[dataName]['resumeButton'].setDisabled(False)
 
-        self.resumeButton2 = QPushButton('Process 2 Resume', self)
-        self.resumeButton2.clicked.connect(self.resumeMethodB)
-        self.resumeButton2.show()
-        self.resumeButton2.move(100, 60)
-        self.resumeButton2.setEnabled(False)
+    def resumeMethod(self,dataName):
+        self.buttons[dataName]['p'].resume()
+        self.buttons[dataName]['pauseButton'].setDisabled(False)
+        self.buttons[dataName]['resumeButton'].setDisabled(True)
 
-        self.killButton = QPushButton('Process 1 Kill', self)
-        self.killButton.clicked.connect(self.killMethodA)
-        self.killButton.show()
-        self.killButton.move(0, 90)
-        self.killButton.setEnabled(False)
+    def killMethod(self,dataName):
+        self.buttons[dataName]['p'].kill()
+        self.buttons[dataName]['pauseButton'].setEnabled(False)
+        self.buttons[dataName]['resumeButton'].setEnabled(False)
+        self.buttons[dataName]['killButton'].setEnabled(False)
+        self.buttons[dataName]['newButton'].setEnabled(True)
 
-        self.killButton2 = QPushButton('Process 2 Kill', self)
-        self.killButton2.clicked.connect(self.killMethodB)
-        self.killButton2.show()
-        self.killButton2.move(100, 90)
-        self.killButton2.setEnabled(False)
+    def refresh(self):
+        for button in self.buttons:
+            self.buttons[button]['newLabel'].deleteLater()
+            self.buttons[button]['newButton'].deleteLater()
+            self.buttons[button]['pauseButton'].deleteLater()
+            self.buttons[button]['resumeButton'].deleteLater()
+            self.buttons[button]['killButton'].deleteLater()
 
-    def clickMethodA(self):
-        p1=subprocess.Popen(["python","file.py","-f","a.csv"])
-        self.p1= psutil.Process(pid=p1.pid)
-        self.pauseButton.setEnabled(True)
-        self.killButton.setEnabled(True)
-        self.newButton.setDisabled(True)
+        for fileButton in self.fileButtons:
+            fileButton.deleteLater()
 
-    def clickMethodB(self):
-        p2=subprocess.Popen(["python","file.py","-f","b.csv"])
-        self.p2= psutil.Process(pid=p2.pid)
-        self.pauseButton2.setEnabled(True)
-        self.killButton2.setEnabled(True)
-        self.newButton2.setDisabled(True)
+        self.buttons={}
+        self.fileButtons=[]
+        x=0
+        for file in os.listdir('./scripts'):
+            fileButton = QPushButton(str(file), self)
+            
+            # state is used below because it get passed a bool value so if you use val=file directly, 
+            # then val will get a bool value i.e. False
+            fileButton.clicked.connect(lambda state,val=file :self.loadFile(val))
+            fileButton.show()
+            fileButton.move(100,x)
+            x+=50
+            self.fileButtons.append(fileButton)
 
-    def pauseMethodA(self):
-        self.p1.suspend()
-        self.pauseButton.setDisabled(True)
-        self.resumeButton.setDisabled(False)
+    def loadFile(self,fileName):
+        for fileButton in self.fileButtons:
+            fileButton.deleteLater()
+        self.fileButtons=[]
+        
+        x=0
+        for dataName in os.listdir('./data'):
+            newLabel= QLabel(dataName,self)
+            newLabel.show()
+            newLabel.move(x+40, 0)
 
-    def pauseMethodB(self):
-        self.p2.suspend()
-        self.pauseButton2.setDisabled(True)
-        self.resumeButton2.setDisabled(False)
+            newButton = QPushButton('Process Start', self)
+            newButton.show()
+            newButton.move(x, 30)
+            newButton.clicked.connect(lambda state, fileName=fileName,dataName=dataName:self.clickMethod(fileName,dataName))
 
-    def resumeMethodA(self):
-        self.p1.resume()
-        self.pauseButton.setDisabled(False)
-        self.resumeButton.setDisabled(True)
+            pauseButton = QPushButton('Process Pause', self)
+            pauseButton.clicked.connect(lambda state, dataName=dataName:self.pauseMethod(dataName))
+            pauseButton.show()
+            pauseButton.move(x, 60)
+            pauseButton.setEnabled(False)
 
-    def resumeMethodB(self):
-        self.p2.resume()
-        self.pauseButton2.setDisabled(False)
-        self.resumeButton2.setDisabled(True)
+            resumeButton = QPushButton('Process Resume', self)
+            resumeButton.clicked.connect(lambda state, dataName=dataName:self.resumeMethod(dataName))
+            resumeButton.show()
+            resumeButton.move(x, 90)
+            resumeButton.setEnabled(False)
 
-    def killMethodA(self):
-        self.p1.kill()
-        self.pauseButton.setEnabled(False)
-        self.resumeButton.setEnabled(False)
-        self.killButton.setEnabled(False)
-        self.newButton.setEnabled(True)
+            killButton = QPushButton('Process Kill', self)
+            killButton.clicked.connect(lambda state, dataName=dataName:self.killMethod(dataName))
+            killButton.show()
+            killButton.move(x, 120)
+            killButton.setEnabled(False)
 
-    def killMethodB(self):
-        self.p2.kill()
-        self.pauseButton2.setEnabled(False)
-        self.resumeButton2.setEnabled(False)
-        self.killButton2.setEnabled(False)
-        self.newButton2.setEnabled(True)
+            self.buttons[dataName]={}
+            self.buttons[dataName]['newButton']=newButton
+            self.buttons[dataName]['newLabel']=newLabel
+            self.buttons[dataName]['pauseButton']=pauseButton
+            self.buttons[dataName]['resumeButton']=resumeButton
+            self.buttons[dataName]['killButton']=killButton
+
+            x+=100
+
+    def closeEvent(self, event):
+        self.close=True
+        event.accept()
+        print('Window closed')
+
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)

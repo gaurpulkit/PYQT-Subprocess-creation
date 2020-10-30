@@ -19,6 +19,8 @@ df=pd.read_csv(args.file)
 class MainWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
+        self.setWindowTitle('Boom boom 1')
+        self.close=False
         self.setMinimumSize(QSize(300, 200))    
         self.s=0 
         self.label1=QLabel(str(df['v'][0]),self)
@@ -27,16 +29,22 @@ class MainWindow(QMainWindow):
         self.label2.move(120,30)
 
     def start(self):
-        Thread(target=self.count).start()
+        self.thread=Thread(target=self.count).start()
 
     def count(self):
         while True:
+            if self.close:
+                break
             time.sleep(1)
             self.label2.setText(str(self.s))
             self.s+=1
 
+    def closeEvent(self, event):
+        self.close=True
+        event.accept()
+
 if __name__ == "__main__":
-    app = QtWidgets.QApplication([])
+    app = QtWidgets.QApplication(sys.argv)
     mainWin = MainWindow()
     mainWin.show()
     mainWin.start()
